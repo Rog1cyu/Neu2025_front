@@ -2,55 +2,62 @@
   <div>
     <div class="page-title">
       <el-icon><Document /></el-icon>
-      <span>护理记录</span>
+      <span>护理记录管理</span>
+
+
     </div>
 
     <div class="search-form">
       <el-form :inline="true" :model="searchForm">
         <el-form-item label="客户姓名">
-          <el-input
-              v-model="searchForm.client_name"
-              placeholder="请输入客户姓名"
-              clearable
-          />
+          <el-input v-model="searchForm.clientName" placeholder="请输入客户姓名" clearable />
         </el-form-item>
-
         <el-form-item label="项目名称">
-          <el-input
-              v-model="searchForm.item_name"
-              placeholder="请输入项目名称"
-              clearable
-          />
+          <el-input v-model="searchForm.itemName" placeholder="请输入项目名称" clearable />
         </el-form-item>
-
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态">
+          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
             <el-option label="全部" value=""></el-option>
             <el-option label="已完成" value="completed"></el-option>
             <el-option label="未完成" value="pending"></el-option>
           </el-select>
         </el-form-item>
-
         <el-form-item>
           <el-button type="primary" @click="loadData">
-            <el-icon><Search /></el-icon>
-            查询
+            <el-icon><Search /></el-icon>查询
+          </el-button>
+          <el-button type="primary" @click="handleAdd">
+            <el-icon><Plus /></el-icon>新增
           </el-button>
         </el-form-item>
       </el-form>
     </div>
 
     <div class="card-container">
-      <div class="table-header">
-        <el-button type="primary" @click="showAddDialog">
-          <el-icon><Plus /></el-icon>
-          新增记录
-        </el-button>
-      </div>
-
-      <el-table :data="tableData" border class="table-container">
-        <el-table-column prop="client_name" label="客户姓名" align="center" />
-        <el-table-column prop="item_name" label="护理项目" align="center" />
+      <el-table :data="tableData" border class="table-container" v-loading="loading">
+        <el-table-column prop="recordId" label="记录ID" align="center" width="100" />
+        <el-table-column label="客户" align="center">
+          <template #default="scope">
+            {{ getClientDisplay(scope.row.clientId) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="床位" align="center">
+          <template #default="scope">
+            {{ getBedDisplayForClient(scope.row.clientId) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="护理项目" align="center">
+          <template #default="scope">
+            {{ getCareItemDisplay(scope.row.itemId) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="执行护工" align="center">
+          <template #default="scope">
+            {{ getStaffDisplay(scope.row.nurseId) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="orderTime" label="预约时间" align="center" width="180" />
+        <el-table-column prop="completionTime" label="完成时间" align="center" width="180" />
         <el-table-column label="状态" align="center" width="100">
           <template #default="scope">
             <el-tag :type="scope.row.status === 'completed' ? 'success' : 'warning'">
@@ -58,17 +65,10 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="completion_time" label="完成时间" align="center" width="180" />
         <el-table-column prop="remarks" label="备注" />
-        <el-table-column label="操作" width="120" align="center">
+        <el-table-column label="操作" width="200" align="center">
           <template #default="scope">
-            <el-button
-                size="small"
-                @click="editRecord(scope.row)"
-                v-if="scope.row.status === 'pending'"
-            >
-              编辑
-            </el-button>
+            <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -83,53 +83,85 @@
       />
     </div>
 
-    <!-- 新增/编辑护理记录对话框 -->
-    <el-dialog
-        :title="dialogTitle"
-        v-model="dialogVisible"
-        width="600px"
-    >
+    <!-- 编辑护理记录对话框 -->
+    <el-dialog :title="form.recordId ? '编辑护理记录' : '新增护理记录'" v-model="dialogVisible" width="600px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="客户" prop="client_id">
+        <el-form-item label="客户">
           <el-select
-              v-model="form.client_id"
+              v-model="form.clientId"
               placeholder="请选择客户"
               filterable
+              @change="syncClientBed"
           >
             <el-option
-                v-for="client in clients"
-                :key="client.client_id"
-                :label="client.name"
-                :value="client.client_id"
+                v-for="client in clientList"
+                :key="client.clientId"
+                :label="`${client.name} (ID: ${client.clientId})`"
+                :value="client.clientId"
             />
           </el-select>
         </el-form-item>
-
-        <el-form-item label="护理项目" prop="item_id">
+        <el-form-item label="床位">
           <el-select
-              v-model="form.item_id"
+              v-model="form.bedId"
+              placeholder="请选择床位"
+              filterable
+              disabled
+          >
+            <el-option
+                v-for="bed in availableBeds"
+                :key="bed.bedId"
+                :label="`${bed.bedCode} (${bed.status})`"
+                :value="bed.bedId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="护理项目">
+          <el-select
+              v-model="form.itemId"
               placeholder="请选择护理项目"
               filterable
           >
             <el-option
-                v-for="item in careItems"
-                :key="item.item_id"
+                v-for="item in careItemList"
+                :key="item.itemId"
                 :label="item.name"
-                :value="item.item_id"
+                :value="item.itemId"
             />
           </el-select>
         </el-form-item>
-
-        <el-form-item label="计划时间" prop="order_time">
+        <el-form-item label="执行护工" prop="nurseId">
+          <el-select v-model="form.nurseId" placeholder="请选择护工" filterable disabled>
+            <el-option
+                v-for="staff in staffList"
+                :key="staff.staffId"
+                :label="`${staff.name} (ID: ${staff.staffId})`"
+                :value="staff.staffId"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="预约时间" prop="orderTime">
           <el-date-picker
-              v-model="form.order_time"
+              v-model="form.orderTime"
               type="datetime"
               placeholder="选择日期时间"
-              format="YYYY-MM-DD HH:mm"
               value-format="YYYY-MM-DD HH:mm"
           />
         </el-form-item>
-
+        <el-form-item label="完成时间" prop="completionTime">
+          <el-date-picker
+              v-model="form.completionTime"
+              type="datetime"
+              placeholder="选择日期时间"
+              value-format="YYYY-MM-DD HH:mm"
+          />
+        </el-form-item>
+        <el-form-item label="状态" prop="status">
+          <el-select v-model="form.status" placeholder="请选择状态">
+            <el-option label="已完成" value="completed"></el-option>
+            <el-option label="未完成" value="pending"></el-option>
+          </el-select>
+        </el-form-item>
         <el-form-item label="备注" prop="remarks">
           <el-input
               v-model="form.remarks"
@@ -139,7 +171,6 @@
           />
         </el-form-item>
       </el-form>
-
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitForm">确定</el-button>
@@ -152,39 +183,67 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import api from '@/services/api'
 import { ElMessage } from 'element-plus'
+import {useStore} from "vuex";
 
 export default {
   setup() {
     const tableData = ref([])
-    const clients = ref([])
-    const careItems = ref([])
     const dialogVisible = ref(false)
-    const isEdit = ref(false)
     const formRef = ref(null)
+    const loading = ref(false)
+    const store = useStore()
+    // 数据缓存
+    const staffList = ref([])      // 所有护工列表
+    const clientList = ref([])     // 所有客户列表
+    const bedList = ref([])        // 所有床位列表
+    const careItemList = ref([])   // 所有护理项目列表
+    const availableBeds = ref([])  // 可用床位列表（用于下拉框）
 
     const searchForm = reactive({
-      client_name: '',
-      item_name: '',
+      clientName: '',
+      itemName: '',
       status: ''
     })
 
+    const handleAdd = () => {
+      const nurseId = Number(store.state.staffId)
+
+      Object.assign(form, {
+        recordId: '',       // 清空表示新增
+        clientId: '',
+        bedId: '',
+        itemId: '',
+        nurseId: nurseId,   // 当前登录者
+        orderTime: '',
+        completionTime: '',
+        status: '',
+        remarks: ''
+      })
+
+      dialogVisible.value = true
+    }
+
     const form = reactive({
-      record_id: '',
-      client_id: '',
-      item_id: '',
-      order_time: '',
+      recordId: '',
+      clientId: '',
+      bedId: '', // 新增床位ID字段
+      itemId: '',
+      nurseId: '',
+      orderTime: '',
+      completionTime: '',
+      status: '',
       remarks: ''
     })
 
     const rules = reactive({
-      client_id: [
-        { required: true, message: '请选择客户', trigger: 'blur' }
+      nurseId: [
+        { required: true, message: '请选择护工', trigger: 'change' }
       ],
-      item_id: [
-        { required: true, message: '请选择护理项目', trigger: 'blur' }
+      orderTime: [
+        { required: true, message: '请选择预约时间', trigger: 'change' }
       ],
-      order_time: [
-        { required: true, message: '请选择计划时间', trigger: 'blur' }
+      status: [
+        { required: true, message: '请选择状态', trigger: 'change' }
       ]
     })
 
@@ -194,43 +253,116 @@ export default {
       total: 0
     })
 
-    const dialogTitle = computed(() => {
-      return isEdit.value ? '编辑护理记录' : '新增护理记录'
+    const filteredClients = computed(() => {
+      const nurseId = Number(store.state.staffId)
+      return clientList.value.filter(client => client.nurseId === nurseId)
     })
 
+    const syncClientBed = () => {
+      const client = clientList.value.find(c => c.clientId === form.clientId)
+      form.bedId = client?.bedId || ''
+    }
+
+    // 加载所有基础数据
+    const loadAllBaseData = async () => {
+      try {
+        // 加载护工数据
+        const staffRes = await api.getStaff({ page: 1, size: 1000 })
+        staffList.value = staffRes.data.records || []
+
+        // 加载客户数据
+        const clientRes = await api.getClients({ page: 1, size: 1000 })
+        clientList.value = clientRes.data.records || []
+
+        // 加载床位数据
+        const bedRes = await api.getBeds({ page: 1, size: 1000 })
+        bedList.value = bedRes.data.records || []
+        availableBeds.value = bedList.value.filter(bed => bed.status === 'available')
+
+        // 加载护理项目数据
+        const careItemRes = await api.getCareItems({ page: 1, size: 1000 })
+        careItemList.value = careItemRes.data.records || []
+      } catch (error) {
+        ElMessage.error('加载基础数据失败')
+      }
+    }
+
+    // 根据ID获取护工显示名称
+    const getStaffDisplay = (staffId) => {
+      if (!staffId) return '-'
+      const staff = staffList.value.find(s => s.staffId === staffId)
+      return staff ? `${staff.name} (${staff.staffId})` : `未知 (${staffId})`
+    }
+
+    // 根据ID获取床位显示名称
+    const getBedDisplay = (bedId) => {
+      if (!bedId) return '未分配'
+      const bed = bedList.value.find(b => b.bedId === bedId)
+      return bed ? bed.bedCode : `未知 (${bedId})`
+    }
+
+    // 根据客户ID获取床位显示名称
+    const getBedDisplayForClient = (clientId) => {
+      if (!clientId) return '未分配'
+      const client = clientList.value.find(c => c.clientId === clientId)
+      if (!client) return '未知客户'
+      return getBedDisplay(client.bedId)
+    }
+
+    // 根据ID获取客户显示名称
+    const getClientDisplay = (clientId) => {
+      if (!clientId) return '-'
+      const client = clientList.value.find(c => c.clientId === clientId)
+      return client ? client.name : `未知 (${clientId})`
+    }
+
+    // 根据ID获取护理项目显示名称
+    const getCareItemDisplay = (itemId) => {
+      if (!itemId) return '-'
+      const item = careItemList.value.find(i => i.itemId === itemId)
+      return item ? item.name : `未知 (${itemId})`
+    }
+
     const loadData = async () => {
+      loading.value = true
       try {
         const params = {
-          ...searchForm,
           page: pagination.current,
-          page_size: pagination.size
+          size: pagination.size
         }
 
-        // 在实际应用中，这里应该调用获取护工负责的护理记录API
+        // 添加状态过滤
+        if (searchForm.status) {
+          params.status = searchForm.status
+        }
+
         const response = await api.getCareRecords(params)
-        tableData.value = response.data.list
-        pagination.total = response.data.total
-      } catch (error) {
-        console.error('获取护理记录失败', error)
-      }
-    }
+        let records = response.data.records || []
+        const currentNurseId = store.state.staffId
+        records = records.filter(record => record.nurseId === Number(currentNurseId))
 
-    const loadClients = async () => {
-      try {
-        // 获取护工负责的客户列表
-        const response = await api.getMyClients()
-        clients.value = response.data
-      } catch (error) {
-        console.error('获取客户列表失败', error)
-      }
-    }
+        // 前端过滤客户名称
+        if (searchForm.clientName) {
+          records = records.filter(record => {
+            const client = clientList.value.find(c => c.clientId === record.clientId)
+            return client && client.name.includes(searchForm.clientName)
+          })
+        }
 
-    const loadCareItems = async () => {
-      try {
-        const response = await api.getCareItems({ status: 'active' })
-        careItems.value = response.data.list
+        // 前端过滤项目名称
+        if (searchForm.itemName) {
+          records = records.filter(record => {
+            const item = careItemList.value.find(i => i.itemId === record.itemId)
+            return item && item.name.includes(searchForm.itemName)
+          })
+        }
+
+        tableData.value = records
+        pagination.total = records.length
       } catch (error) {
-        console.error('获取护理项目失败', error)
+        ElMessage.error('获取护理记录失败: ' + (error.message || '未知错误'))
+      } finally {
+        loading.value = false
       }
     }
 
@@ -240,83 +372,110 @@ export default {
       loadData()
     }
 
-    const showAddDialog = () => {
-      isEdit.value = false
-      Object.assign(form, {
-        record_id: '',
-        client_id: '',
-        item_id: '',
-        order_time: '',
-        remarks: ''
-      })
-      dialogVisible.value = true
-    }
+    const handleEdit = async (row) => {
+      // 获取该客户的床位ID
+      const client = clientList.value.find(c => c.clientId === row.clientId)
+      const bedId = client ? client.bedId : null
 
-    const editRecord = (record) => {
-      isEdit.value = true
       Object.assign(form, {
-        record_id: record.record_id,
-        client_id: record.client_id,
-        item_id: record.item_id,
-        order_time: record.order_time,
-        remarks: record.remarks
+        recordId: row.recordId,
+        clientId: row.clientId,
+        bedId: bedId, // 设置床位ID
+        itemId: row.itemId,
+        nurseId: row.nurseId,
+        orderTime: row.orderTime,
+        completionTime: row.completionTime,
+        status: row.status,
+        remarks: row.remarks
       })
       dialogVisible.value = true
     }
 
     const submitForm = () => {
       formRef.value.validate(async valid => {
-        if (valid) {
+        if (form.recordId) {
           try {
-            if (isEdit.value) {
-              await api.updateCareRecord(form.record_id, form)
-              ElMessage.success('更新成功')
-            } else {
-              await api.addCareRecord(form)
-              ElMessage.success('新增成功')
+            // 更新护理记录
+            const careRecordData = {
+              clientId: form.clientId,
+              itemId: form.itemId,
+              nurseId: form.nurseId,
+              orderTime: form.orderTime,
+              completionTime: form.completionTime,
+              status: form.status,
+              remarks: form.remarks
+            }
+            await api.updateCareRecord(form.recordId, careRecordData)
+
+            // 更新客户床位信息
+            if (form.bedId) {
+              const clientData = {
+                clientId: form.clientId,
+                bedId: form.bedId
+              }
+              await api.updateClient(form.clientId, clientData)
             }
 
+            ElMessage.success('更新成功')
             dialogVisible.value = false
+
+            // 重新加载数据
+            await loadAllBaseData()
             loadData()
           } catch (error) {
-            ElMessage.error('操作失败')
+            ElMessage.error('操作失败: ' + (error.message || '未知错误'))
           }
+        }else{
+          const careRecordData = {
+            clientId: form.clientId,
+            itemId: form.itemId,
+            nurseId: form.nurseId,
+            orderTime: form.orderTime,
+            completionTime: form.completionTime,
+            status: form.status,
+            remarks: form.remarks
+          }
+          await api.addCareRecord(careRecordData)
+          ElMessage.success('新增成功')
+          dialogVisible.value = false
+          await loadAllBaseData()
+          loadData()
         }
       })
     }
 
-    onMounted(() => {
+    onMounted(async () => {
+      await loadAllBaseData()
       loadData()
-      loadClients()
-      loadCareItems()
     })
 
     return {
       tableData,
-      clients,
-      careItems,
       searchForm,
       pagination,
       form,
       rules,
       formRef,
       dialogVisible,
-      isEdit,
-      dialogTitle,
+      staffList,
+      clientList,
+      bedList,
+      careItemList,
+      availableBeds,
+      loading,
       loadData,
       handleSizeChange,
-      showAddDialog,
-      editRecord,
-      submitForm
+      handleEdit,
+      submitForm,
+      getStaffDisplay,
+      getBedDisplay,
+      getBedDisplayForClient,
+      getClientDisplay,
+      getCareItemDisplay,
+      handleAdd,
+      syncClientBed,
+      filteredClients
     }
   }
 }
 </script>
-
-<style scoped>
-.table-header {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 20px;
-}
-</style>

@@ -25,16 +25,29 @@
     </div>
 
     <div class="card-container">
-      <el-table :data="tableData" border class="table-container">
+      <el-table :data="tableData" border class="table-container" v-loading="loading">
         <el-table-column prop="name" label="姓名" align="center" />
-        <el-table-column prop="gender" label="性别" align="center" width="80">
+        <el-table-column label="性别" align="center" width="80">
           <template #default="scope">
             {{ scope.row.gender === 'male' ? '男' : '女' }}
           </template>
         </el-table-column>
-        <el-table-column prop="age" label="年龄" align="center" width="80" />
+        <el-table-column label="年龄" align="center" width="80">
+          <template #default="scope">
+            {{ calculateAge(scope.row.birthDate) }}
+          </template>
+        </el-table-column>
         <el-table-column prop="phone" label="联系电话" align="center" width="150" />
-        <el-table-column prop="bed_code" label="床位号" align="center" width="120" />
+        <el-table-column label="床位" align="center" width="120">
+          <template #default="scope">
+            {{ getBedDisplay(scope.row.bedId) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="健康管家" align="center">
+          <template #default="scope">
+            {{ getStaffDisplay(scope.row.nurseId) }}
+          </template>
+        </el-table-column>
         <el-table-column label="护理记录" align="center" width="120">
           <template #default="scope">
             <el-button
@@ -64,11 +77,20 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/services/api'
+import { useStore } from 'vuex'
+import { ElMessage } from 'element-plus'
 
 export default {
   setup() {
     const router = useRouter()
+    const store = useStore()
+    console.log('store', store)
     const tableData = ref([])
+    const loading = ref(false)
+
+    // 数据缓存
+    const staffList = ref([])      // 所有护工列表
+    const bedList = ref([])        // 所有床位列表
 
     const searchForm = reactive({
       keyword: ''
@@ -80,29 +102,37 @@ export default {
       total: 0
     })
 
-    const loadData = async () => {
+    // 加载所有基础数据
+    const loadAllBaseData = async () => {
       try {
-        const params = {
-          ...searchForm,
-          page: pagination.current,
-          page_size: pagination.size
-        }
+        // 加载护工数据
+        const staffRes = await api.getStaff({ page: 1, size: 1000 })
+        staffList.value = staffRes.data.records || []
 
-        // 在实际应用中，这里应该调用获取护工负责的客户列表API
-        const response = await api.getClients(params)
-        tableData.value = response.data.list.map(client => {
-          return {
-            ...client,
-            age: calculateAge(client.birth_date)
-          }
-        })
-        pagination.total = response.data.total
+        // 加载床位数据
+        const bedRes = await api.getBeds({ page: 1, size: 1000 })
+        bedList.value = bedRes.data.records || []
       } catch (error) {
-        console.error('获取客户数据失败', error)
+        ElMessage.error('加载基础数据失败')
       }
     }
 
+    // 根据ID获取护工显示名称
+    const getStaffDisplay = (staffId) => {
+      if (!staffId) return '-'
+      const staff = staffList.value.find(s => s.staffId === staffId)
+      return staff ? staff.name : `未知 (${staffId})`
+    }
+
+    // 根据ID获取床位显示名称
+    const getBedDisplay = (bedId) => {
+      if (!bedId) return '未分配'
+      const bed = bedList.value.find(b => b.bedId === bedId)
+      return bed ? bed.bedCode : `未知 (${bedId})`
+    }
+
     const calculateAge = (birthDate) => {
+      if (!birthDate) return ''
       const today = new Date()
       const birth = new Date(birthDate)
       let age = today.getFullYear() - birth.getFullYear()
@@ -115,6 +145,32 @@ export default {
       return age
     }
 
+    const loadData = async () => {
+      loading.value = true
+      try {
+        // 获取当前护工ID（从Vuex中）
+        const currentNurseId = store.state.staffId
+
+        const params = {
+          keyword: searchForm.keyword,
+          page: pagination.current,
+          size: pagination.size,
+          nurseId: currentNurseId // 只查询当前护工负责的客户
+        }
+
+        const response = await api.getClients(params)
+
+        // 适配后端返回的数据结构
+        tableData.value = response.data.records || []
+        pagination.total = response.data.total || 0
+      } catch (error) {
+        console.error('获取客户数据失败', error)
+        ElMessage.error('获取客户数据失败')
+      } finally {
+        loading.value = false
+      }
+    }
+
     const handleSizeChange = (size) => {
       pagination.size = size
       pagination.current = 1
@@ -124,11 +180,12 @@ export default {
     const viewCareRecords = (client) => {
       router.push({
         path: '/nurse/care-records',
-        query: { clientId: client.client_id }
+        query: { clientId: client.clientId }
       })
     }
 
-    onMounted(() => {
+    onMounted(async () => {
+      await loadAllBaseData()
       loadData()
     })
 
@@ -136,9 +193,13 @@ export default {
       tableData,
       searchForm,
       pagination,
+      loading,
       loadData,
       handleSizeChange,
-      viewCareRecords
+      viewCareRecords,
+      calculateAge,
+      getStaffDisplay,
+      getBedDisplay
     }
   }
 }
