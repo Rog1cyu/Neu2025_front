@@ -110,7 +110,6 @@ export default {
   setup() {
     const store = useStore()
     const router = useRouter()
-
     const userName = computed(() => store.state.user?.name || '管理员')
     const userAvatar = computed(() => store.state.user?.avatar || '')
     const activeMenu = computed(() => router.currentRoute.value.path)

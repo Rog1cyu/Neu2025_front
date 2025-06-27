@@ -32,17 +32,6 @@ export default createStore({
     actions: {
         async login({ commit }, credentials) {
             try {
-                // 这里应该是实际的API调用
-                // const response = await authService.login(credentials)
-                // 模拟响应
-
-
-                /*const response = {
-                    data: {
-                        token: 'mock-token',
-                        role: credentials.username.includes('admin') ? 'admin' : 'nurse'
-                    }
-                }*/
                 const response = await api.login(credentials)
 
                 commit('setToken', {
