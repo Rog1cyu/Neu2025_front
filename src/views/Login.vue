@@ -89,7 +89,7 @@ export default {
                 }
               })
               .catch(error => {
-                ElMessage.error(error.message || '登录失败，请检查账号密码')
+                ElMessage.error('登录失败，请检查账号密码')
               })
               .finally(() => {
                 loading.value = false

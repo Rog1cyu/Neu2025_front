@@ -24,6 +24,7 @@ const routes = [
       { path: 'clients', component: () => import('@/components/ClientManagement') },
       { path: 'care-records', component: () => import('@/components/CareRecordManagement') },
       { path: 'care-items', component: () => import('@/components/CareItemManagement') },
+      { path: 'meal', component: () => import('@/components/MealManagement') },
       { path: '', redirect: '/admin/beds' }
     ]
   },

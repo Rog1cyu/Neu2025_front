@@ -52,6 +52,11 @@
             <span>项目管理</span>
           </el-menu-item>
         </el-sub-menu>
+
+        <el-menu-item index="/admin/meal">
+          <el-icon><KnifeFork /></el-icon>
+          <span>膳食管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -60,8 +65,9 @@
         <div class="header-right">
           <el-dropdown>
             <span class="user-info">
-              <el-avatar :size="36" :src="userAvatar" />
-              <span class="user-name">管理员，{{ userName }}</span>
+              <!-- 固定显示assets/logo.png作为头像 -->
+              <el-avatar :size="36" :src="logoImage" />
+              <span class="user-name">欢迎回来，尊敬的管理员{{ userName }}</span>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
@@ -94,24 +100,31 @@
 </template>
 
 <script>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter } from 'vue-router'
 import {
   User, Avatar, UserFilled, House,
-  FirstAidKit, Document, List, SwitchButton
+  FirstAidKit, Document, List, SwitchButton, KnifeFork
 } from '@element-plus/icons-vue'
+import logoImage from '@/assets/man.png' // 直接导入logo图片
+import api from '@/services/api' // 引入API服务
 
 export default {
   components: {
+    KnifeFork,
     User, Avatar, UserFilled, House,
     FirstAidKit, Document, List, SwitchButton
   },
   setup() {
     const store = useStore()
     const router = useRouter()
-    const userName = computed(() => store.state.user?.name || '管理员')
-    const userAvatar = computed(() => store.state.user?.avatar || '')
+
+    // 用户名使用ref以便更新
+    const userName = ref('管理员')
+    // 直接使用导入的logo图片
+    const logo = ref(logoImage)
+
     const activeMenu = computed(() => router.currentRoute.value.path)
 
     const routeNames = {
@@ -119,11 +132,78 @@ export default {
       '/admin/staff': '员工管理',
       '/admin/clients': '客户管理',
       '/admin/care-records': '护理记录管理',
-      '/admin/care-items': '护理项目管理'
+      '/admin/care-items': '护理项目管理',
+      '/admin/meal': '膳食管理'
     }
 
     const currentRouteName = computed(() => {
       return routeNames[router.currentRoute.value.path] || '管理面板'
+    })
+
+    // 获取当前登录管理员信息
+    const fetchCurrentAdminInfo = async () => {
+      try {
+        // 从store获取当前登录管理员ID
+        const currentAdminId = store.state.staffId
+
+        if (!currentAdminId) {
+          console.warn('未找到当前登录管理员ID')
+          return
+        }
+
+        console.log('当前管理员ID:', currentAdminId, typeof currentAdminId)
+
+        // 尝试获取当前用户信息（可能登录时已存储）
+        if (store.state.user?.name) {
+          userName.value = store.state.user.name
+          return
+        }
+
+        // 使用API获取员工列表（管理员也在员工表中）
+        const response = await api.getStaff({
+          page: 1,
+          size: 1000
+        })
+
+        console.log('员工列表API响应:', response)
+
+        if (response.data && response.data.records && Array.isArray(response.data.records)) {
+          // 输出所有员工ID和名称以便调试
+          console.log('所有员工记录:', response.data.records.map(r => ({
+            id: r.id,
+            staffId: r.staffId,
+            userId: r.userId,
+            name: r.name
+          })))
+
+          // 尝试多种可能的ID字段和类型
+          const admin = response.data.records.find(s =>
+              (s.id == currentAdminId) ||
+              (s.staffId == currentAdminId) ||
+              (s.userId == currentAdminId) ||
+              (s.id === String(currentAdminId)) ||
+              (s.staffId === String(currentAdminId)) ||
+              (s.userId === String(currentAdminId))
+          )
+
+          if (admin) {
+            console.log('找到匹配的管理员:', admin)
+            // 尝试多种可能的名称字段
+            userName.value = admin.name || admin.username || admin.realName || admin.nickname || '管理员'
+          } else {
+            console.warn(`未找到ID为 ${currentAdminId} 的管理员`)
+            console.warn('可用的员工ID:', response.data.records.map(r => r.id || r.staffId || r.userId))
+          }
+        } else {
+          console.warn('返回的员工列表数据格式不正确')
+        }
+      } catch (error) {
+        console.error('获取管理员信息失败', error)
+      }
+    }
+
+    onMounted(() => {
+      fetchCurrentAdminInfo()
     })
 
     const logout = () => {
@@ -133,7 +213,7 @@ export default {
 
     return {
       userName,
-      userAvatar,
+      logoImage: logo,
       activeMenu,
       currentRouteName,
       logout

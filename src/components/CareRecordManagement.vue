@@ -14,7 +14,7 @@
           <el-input v-model="searchForm.itemName" placeholder="请输入项目名称" clearable />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
+          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 200px">
             <el-option label="全部" value=""></el-option>
             <el-option label="已完成" value="completed"></el-option>
             <el-option label="未完成" value="pending"></el-option>

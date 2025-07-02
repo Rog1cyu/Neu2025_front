@@ -9,7 +9,7 @@
     <div class="search-form">
       <el-form :inline="true" :model="searchForm">
         <el-form-item label="员工状态">
-          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable>
+          <el-select v-model="searchForm.status" placeholder="请选择状态" clearable style="width: 200px">
             <el-option label="全部" value=""></el-option>
             <el-option label="工作" value="working"></el-option>
             <el-option label="空闲" value="idle"></el-option>

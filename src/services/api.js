@@ -106,5 +106,19 @@ export default {
 
     login(data) {
         return apiClient.post('/login', data)
+    },
+
+    // 膳食相关
+    getMealsByDate(date) {
+        return apiClient.get(`/meals/${date}`)
+    },
+    addMeal(data) {   // 新增膳食信息
+        return apiClient.post('/meals', data)
+    },
+    updateMeal(data) {  // 修改膳食信息
+        return apiClient.put('/meals', data)
+    },
+    deleteMeal(id) {  // 删除某一条餐别
+        return apiClient.delete(`/meals/${id}`)
     }
 }
