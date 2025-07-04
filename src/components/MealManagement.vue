@@ -28,6 +28,13 @@
             <el-input type="textarea" v-model="mealForm.introduce" rows="5" />
           </el-form-item>
           <el-form-item label="图片">
+            <el-upload
+                action=""
+                :http-request="customUpload"
+                show-file-list="false"
+            >
+              <el-button type="primary">上传图片</el-button>
+            </el-upload>
             <el-input v-model="mealForm.image" placeholder="图片URL" />
             <div class="image-preview" v-if="mealForm.image">
               <img :src="mealForm.image" alt="预览" class="preview-image" />
@@ -97,6 +104,18 @@ const typeMap = {
   lunch: '中餐',
   dinner: '晚餐'
 }
+
+const customUpload = async ({ file }) => {
+  try {
+    const res = await api.uploadMealImage(file)
+    mealForm.value.image = res.data
+    ElMessage.success('上传成功')
+  } catch (err) {
+    console.error('上传失败', err)
+    ElMessage.error('上传失败: ' + (err.response?.data || err.message))
+  }
+}
+
 
 // 更健壮的日期格式化
 const formatDate = (dateStr) => {
@@ -297,6 +316,7 @@ const closeDialog = () => {
   height: 60px;
   font-size: 18px;
   letter-spacing: 1px;
+  margin-left: 5px;
 }
 
 .meal-display {

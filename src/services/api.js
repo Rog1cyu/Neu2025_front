@@ -120,5 +120,13 @@ export default {
     },
     deleteMeal(id) {  // 删除某一条餐别
         return apiClient.delete(`/meals/${id}`)
+    },
+
+    uploadMealImage(file) {
+        const formData = new FormData()
+        formData.append('file', file)
+        return axios.post('http://localhost:8080/api/upload/meal', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        })
     }
 }
